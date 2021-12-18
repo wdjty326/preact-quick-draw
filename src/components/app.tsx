@@ -1,10 +1,10 @@
 import { FunctionalComponent, h } from "preact";
-import QuickDrawCanvas from "./canvas";
+import Canvas from "./canvas";
 
 const App: FunctionalComponent = () => {
 	return (
 		<div id="app">
-			<QuickDrawCanvas />
+			<Canvas />
 		</div>
 	);
 };
