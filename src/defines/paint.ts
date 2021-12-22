@@ -8,7 +8,13 @@ export interface PaintLocation {
 }
 
 export enum PaintReadyState {
-	Ready = "Ready",
+	Ready = "ready",
 	Play = "play",
 	Ended = "ended",
+}
+
+export enum PaintCursorState {
+	Pen = "pen",
+	Spoide = "spoide",
+	Eraser = "eraser",
 }
