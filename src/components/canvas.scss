@@ -1,11 +1,18 @@
 :global(#painting_canvas) {
 	position: relative;
 	width: 100%;
+	max-width: 1024px;
 	height: 100%;
-
-	:global(#main_layer),
-	:global(#painting_layer) {
+	:global(#main_layer) {
 		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: auto;
+	}
+
+	:global(#painting_layer) {
+		position: relative;
 		top: 0;
 		left: 0;
 		width: 100%;

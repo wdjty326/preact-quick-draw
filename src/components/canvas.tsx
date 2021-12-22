@@ -1,4 +1,4 @@
-import { FunctionComponent, h } from "preact";
+import { Fragment, FunctionComponent, h } from "preact";
 import { useRef, useEffect } from "preact/hooks";
 import { isPassive, objState } from "../libs";
 import { PaintCursorState, PaintLocation, PaintReadyState } from "../defines/paint";
@@ -18,7 +18,7 @@ const Canvas: FunctionComponent = () => {
 	const renderStartCursor = objState<number>(0);
 	const renderCursor = objState<number>(0);
 
-	const cursorState = objState<PaintCursorState>(PaintCursorState.Spoide);
+	const cursorState = objState<PaintCursorState>(PaintCursorState.Pen);
 
 	// const cursorDisp = objState<boolean>(false);
 	// const cursorX = objState<number>(0);
@@ -27,6 +27,34 @@ const Canvas: FunctionComponent = () => {
 	const size = objState<number>(10);
 	const radius = objState<"round" | "square">("round");
 	const color = objState<string>("#0d6efd");
+
+	const spoideColor = (e: MouseEvent | TouchEvent): void => {
+		if (cursorState.value === PaintCursorState.Spoide) {
+			e.preventDefault();
+			if (e.currentTarget) {
+				if (readyState.value !== PaintReadyState.Ready) return;
+		
+				const target = e.currentTarget as HTMLCanvasElement;
+				const ctx = target.getContext("2d") as CanvasRenderingContext2D;
+
+				let x, y;
+				const rect = target.getBoundingClientRect();
+				if ("touches" in e) {
+					x = e.touches[0].clientX - rect.left;
+					y = e.touches[0].clientY - rect.top;
+				} else {
+					x = e.clientX - rect.left;
+					y = e.clientY - rect.top;
+				}
+	
+				x = Math.round(x * target.width / target.offsetWidth);
+				y = Math.round(y * target.height / target.offsetHeight);
+	
+				const data = ctx.getImageData(x, y, 1, 1);
+				console.log(data);
+			}
+		}
+	};
 
 	const mousedown = (e: MouseEvent | TouchEvent): void => {
 		e.preventDefault();
@@ -159,6 +187,7 @@ const Canvas: FunctionComponent = () => {
 			renderCursor.set(datas.length);
 
 			ctx.lineTo(x, y);
+			ctx.stroke();
 			ctx.closePath();
 
 			readyState.set(PaintReadyState.Ready);
@@ -177,72 +206,74 @@ const Canvas: FunctionComponent = () => {
 		}
 	};
 
-	const spoideColor = (e: MouseEvent | TouchEvent): void => {
-		if (cursorState.value === PaintCursorState.Spoide) {
-			e.preventDefault();
-			if (e.currentTarget) {
-				if (readyState.value !== PaintReadyState.Ready) return;
-		
-				const target = e.currentTarget as HTMLCanvasElement;
-				const ctx = target.getContext("2d") as CanvasRenderingContext2D;
-
-				let x, y;
-				const rect = target.getBoundingClientRect();
-				if ("touches" in e) {
-					x = e.touches[0].clientX - rect.left;
-					y = e.touches[0].clientY - rect.top;
-				} else {
-					x = e.clientX - rect.left;
-					y = e.clientY - rect.top;
-				}
-	
-				x = Math.round(x * target.width / target.offsetWidth);
-				y = Math.round(y * target.height / target.offsetHeight);
-	
-				const data = ctx.getImageData(x, y, 1, 1);
-			}
-		}
-	}
-
 	useEffect(() => {
 		const passive = isPassive() ? {
 			passive: false,
 		} : false;
-		if (paintingLayer.current) {
-			paintingLayer.current.addEventListener("mousemove", mousemove, passive);
-			paintingLayer.current.addEventListener("touchmove", mousemove, passive);
+
+		const onMousedown = mousedown.bind(this);
+		const onMousemove = mousemove.bind(this);
+		const onMouseup = mouseup.bind(this);
+
+		const layer = paintingLayer.current;
+
+		if (layer) {
+			layer.addEventListener("mousedown", onMousedown);
+			layer.addEventListener("mousemove", onMousemove, passive);
+			layer.addEventListener("mouseup", onMouseup);
+			// paintingLayer.current.addEventListener("touchmove", mousemove, passive);
 		}
 
 		return (): void => {
-			if (paintingLayer.current) {
-				paintingLayer.current.removeEventListener("mousemove", mousemove);
-				paintingLayer.current.removeEventListener("touchmove", mousemove);
+			if (layer) {
+				layer.removeEventListener("mousedown", onMousedown);
+				layer.removeEventListener("mousemove", onMousemove);
+				layer.removeEventListener("mouseup", onMouseup);
+				// paintingLayer.current.removeEventListener("touchmove", mousemove);
 			}
 		};
 	}, []);
 
-	return <div id="painting_canvas">
-		<canvas
-			id="main_layer"
-			width={cWidth}
-			height={cHeight}
-			ref={mainLayer}
-			onClick={spoideColor}
-		/>
-		<canvas
-			id="painting_layer"
-			width={cWidth}
-			height={cHeight}
-			ref={paintingLayer}
-			style={{
-				pointerEvents: cursorState.value !== PaintCursorState.Pen ? "none" : "auto", 
-			}}
-			onMouseDown={mousedown}
-			onMouseUp={mouseup}
-			onTouchStart={mousedown}
-			onTouchEnd={mouseup}
-		/>
-	</div>;
+	return <>
+		<div id="painting_canvas">
+			<canvas
+				id="main_layer"
+				width={cWidth}
+				height={cHeight}
+				ref={mainLayer}
+				onClick={spoideColor}
+			/>
+			<canvas
+				id="painting_layer"
+				width={cWidth}
+				height={cHeight}
+				ref={paintingLayer}
+				style={{
+					pointerEvents: cursorState.value !== PaintCursorState.Pen ? "none" : "auto", 
+				}}
+			/>
+		</div>
+		<button onClick={() => cursorState.set(PaintCursorState.Pen)}>
+			Pen
+		</button>
+		<button onClick={() => cursorState.set(PaintCursorState.Spoide)}>
+			Spoide
+		</button>
+		<input type="input" value={color.value} onInput={(e): void => {
+			const target = e.target as HTMLInputElement;
+			color.set(target.value);
+		}} />
+		<input type="input" value={size.value} onInput={(e): void => {
+			const target = e.target as HTMLInputElement;
+			size.set(parseInt(target.value, 10));
+		}} />
+		<button onClick={() => radius.set("round")}>
+			Round
+		</button>
+		<button onClick={() => radius.set("square")}>
+			Square
+		</button>
+	</>;
 };
 
 export default Canvas;

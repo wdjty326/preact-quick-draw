@@ -1,13 +1,13 @@
-import { useState } from "preact/hooks";
+import { StateUpdater, useState } from "preact/hooks";
 
 export interface ObjectState<T> {
 	readonly value: T;
 	set (value: T | ((prevState: T) => T)): void;
 }
 
-export function objState<T> (initialState: T | (() => T)): ObjectState<T> {
+export function objStated<T> (state: [T, StateUpdater<T>]): ObjectState<T> {
 	// eslint-disable-next-line react-hooks/rules-of-hooks
-	const [value, updator] = useState<T>(initialState);
+	const [value, updator] = state;
 	return {
 		value,
 		set (value: T): void {
@@ -15,4 +15,9 @@ export function objState<T> (initialState: T | (() => T)): ObjectState<T> {
 			updator(value);
 		},
 	};
+}
+
+export function objState<T> (initialState: T | (() => T)): ObjectState<T> {
+	// eslint-disable-next-line react-hooks/rules-of-hooks
+	return objStated(useState<T>(initialState));
 }
