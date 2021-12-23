@@ -15,6 +15,6 @@ export enum PaintReadyState {
 
 export enum PaintCursorState {
 	Pen = "pen",
-	Spoide = "spoide",
+	Spoid = "spoid",
 	Eraser = "eraser",
 }

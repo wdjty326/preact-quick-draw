@@ -14,6 +14,9 @@ const Canvas: FunctionComponent = () => {
 
 	const readyState = objState<PaintReadyState>(PaintReadyState.Ready);
 
+	const rootPositions = objState<number[]>([]);
+	const rootPointer = objState<number>(0);
+
 	const renderData = objState<PaintLocation[]>([]);
 	const renderStartCursor = objState<number>(0);
 	const renderCursor = objState<number>(0);
@@ -28,8 +31,80 @@ const Canvas: FunctionComponent = () => {
 	const radius = objState<"round" | "square">("round");
 	const color = objState<string>("#0d6efd");
 
-	const spoideColor = (e: MouseEvent | TouchEvent): void => {
-		if (cursorState.value === PaintCursorState.Spoide) {
+	const reload = (): void => {
+		const layer = mainLayer.current;
+		if (layer) {
+			const ctx = layer.getContext("2d") as CanvasRenderingContext2D;
+			ctx.lineCap = radius.value;
+			ctx.lineJoin = "round";
+			ctx.clearRect(0, 0, layer.width, layer.height);
+			ctx.beginPath();
+			console.log(renderData.value);
+			for (let i = 0; i < renderCursor.value; i++) {
+				const data = renderData.value[i];
+				if (data.isRoot) {
+					ctx.stroke();
+
+					ctx.strokeStyle = data.color;
+					ctx.lineWidth = data.size;
+
+					ctx.moveTo(data.x, data.y);
+				}
+				else ctx.lineTo(data.x, data.y);
+			}
+			ctx.stroke();
+			ctx.closePath();
+		}
+	};
+
+	const undo = (): void => {
+		let pointer = rootPointer.value - 1;
+		pointer = pointer > 0 ? pointer : 0;
+
+		const cursor = rootPositions.value[pointer];
+
+		rootPointer.set(pointer);
+		renderCursor.set(cursor);
+		// for (let i = renderCursor.value; i > 0; i--) {
+		// 	if (renderData.value[i].isRoot) {
+		// 		renderCursor.set(i - 1);
+		// 		break;
+		// 	}
+		// }
+		reload();
+	};
+
+	const redo = (): void => {
+		let pointer = rootPointer.value + 1;
+		pointer = pointer < rootPositions.value.length ? pointer : rootPositions.value.length - 1;
+
+		const cursor = rootPositions.value[pointer];
+
+		rootPointer.set(pointer);
+		renderCursor.set(cursor);
+		// for (let i = renderCursor.value; i < renderData.value.length; i++) {
+		// 	if (renderData.value[i].isRoot) {
+		// 		renderCursor.set(i - 1);
+		// 		break;
+		// 	}
+		// }
+		reload();
+	};
+
+	const clear = (): void => {
+		renderCursor.set(0);
+		renderStartCursor.set(0);
+		renderData.set([]);
+
+		rootPositions.set([]);
+		rootPointer.set(0);
+
+		reload();
+	};
+
+	const SpoidColor = (e: MouseEvent | TouchEvent): void => {
+		console.log(cursorState.value === PaintCursorState.Spoid);
+		if (cursorState.value === PaintCursorState.Spoid) {
 			e.preventDefault();
 			if (e.currentTarget) {
 				if (readyState.value !== PaintReadyState.Ready) return;
@@ -50,8 +125,17 @@ const Canvas: FunctionComponent = () => {
 				x = Math.round(x * target.width / target.offsetWidth);
 				y = Math.round(y * target.height / target.offsetHeight);
 	
-				const data = ctx.getImageData(x, y, 1, 1);
-				console.log(data);
+				const imageData = ctx.getImageData(x, y, 1, 1);
+				const colorData = imageData.data;
+
+				// 색상이 없을 경우
+				if (colorData[4] === 0) return;
+
+				const r = `00${colorData[0].toString(16)}`.slice(-2);
+				const g = `00${colorData[1].toString(16)}`.slice(-2);
+				const b = `00${colorData[2].toString(16)}`.slice(-2);
+
+				color.set(`#${r}${g}${b}`);
 			}
 		}
 	};
@@ -93,10 +177,18 @@ const Canvas: FunctionComponent = () => {
 				isRoot: true,
 				isTransparent: false,
 			});
-
 			renderData.set(datas);
-			renderCursor.set(datas.length);
-			renderStartCursor.set(datas.length);
+
+			const cursor = datas.length - 1;
+			renderCursor.set(cursor);
+			renderStartCursor.set(cursor);
+
+			const positions = rootPositions.value;
+			positions.push(cursor);
+			rootPositions.set(positions);
+
+			const pointer = positions.length - 1;
+			rootPointer.set(pointer);
 
 			ctx.beginPath();
 			ctx.moveTo(x, y);
@@ -211,28 +303,24 @@ const Canvas: FunctionComponent = () => {
 			passive: false,
 		} : false;
 
-		const onMousedown = mousedown.bind(this);
-		const onMousemove = mousemove.bind(this);
-		const onMouseup = mouseup.bind(this);
-
 		const layer = paintingLayer.current;
 
 		if (layer) {
-			layer.addEventListener("mousedown", onMousedown);
-			layer.addEventListener("mousemove", onMousemove, passive);
-			layer.addEventListener("mouseup", onMouseup);
+			layer.addEventListener("mousedown", mousedown);
+			layer.addEventListener("mousemove", mousemove, passive);
+			layer.addEventListener("mouseup", mouseup);
 			// paintingLayer.current.addEventListener("touchmove", mousemove, passive);
 		}
 
 		return (): void => {
 			if (layer) {
-				layer.removeEventListener("mousedown", onMousedown);
-				layer.removeEventListener("mousemove", onMousemove);
-				layer.removeEventListener("mouseup", onMouseup);
+				layer.removeEventListener("mousedown", mousedown);
+				layer.removeEventListener("mousemove", mousemove);
+				layer.removeEventListener("mouseup", mouseup);
 				// paintingLayer.current.removeEventListener("touchmove", mousemove);
 			}
 		};
-	}, []);
+	}, [size.value, color.value, radius.value]);
 
 	return <>
 		<div id="painting_canvas">
@@ -241,7 +329,7 @@ const Canvas: FunctionComponent = () => {
 				width={cWidth}
 				height={cHeight}
 				ref={mainLayer}
-				onClick={spoideColor}
+				onClick={SpoidColor}
 			/>
 			<canvas
 				id="painting_layer"
@@ -249,15 +337,15 @@ const Canvas: FunctionComponent = () => {
 				height={cHeight}
 				ref={paintingLayer}
 				style={{
-					pointerEvents: cursorState.value !== PaintCursorState.Pen ? "none" : "auto", 
+					display: cursorState.value !== PaintCursorState.Pen ? "none" : "block",
 				}}
 			/>
 		</div>
 		<button onClick={() => cursorState.set(PaintCursorState.Pen)}>
 			Pen
 		</button>
-		<button onClick={() => cursorState.set(PaintCursorState.Spoide)}>
-			Spoide
+		<button onClick={() => cursorState.set(PaintCursorState.Spoid)}>
+			Spoid
 		</button>
 		<input type="input" value={color.value} onInput={(e): void => {
 			const target = e.target as HTMLInputElement;
@@ -272,6 +360,15 @@ const Canvas: FunctionComponent = () => {
 		</button>
 		<button onClick={() => radius.set("square")}>
 			Square
+		</button>
+		<button onClick={undo}>
+			Undo
+		</button>
+		<button onClick={redo}>
+			Redo
+		</button>
+		<button onClick={clear}>
+			Clear
 		</button>
 	</>;
 };
