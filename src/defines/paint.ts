@@ -3,6 +3,7 @@ export interface PaintLocation {
 	y: number;
 	color: string;
 	size: number;
+	radius: string;
 	isRoot: boolean;
 	isTransparent: boolean;
 }
@@ -10,7 +11,6 @@ export interface PaintLocation {
 export enum PaintReadyState {
 	Ready = "ready",
 	Play = "play",
-	Ended = "ended",
 }
 
 export enum PaintCursor {
