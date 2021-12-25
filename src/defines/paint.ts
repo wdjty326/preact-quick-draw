@@ -6,6 +6,7 @@ export interface PaintLocation {
 	radius: string;
 	isRoot: boolean;
 	isTransparent: boolean;
+	layerId: string;
 }
 
 export enum PaintReadyState {
@@ -17,4 +18,9 @@ export enum PaintCursor {
 	Pen = "pen",
 	Spoid = "spoid",
 	Eraser = "eraser",
+}
+
+export interface PaintLayer {
+	id: string;
+	name: string;
 }

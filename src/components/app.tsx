@@ -6,7 +6,7 @@ import Canvas from "./canvas";
 const App: FunctionalComponent = () => {
 	return (
 		<div id="app">
-			<Canvas />
+			<Canvas cWidth={1920} cHeight={1080} />
 		</div>
 	);
 };
