@@ -34,6 +34,11 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 	private renderCursor = 0;
 	private renderStartCursor = 0;
 
+	private prevState = {
+		x: 0,
+		y: 0,
+	};
+
 	constructor () {
 		super();
 
@@ -116,11 +121,19 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			// 	readyState: PaintReadyState.Play,
 			// });
 
-			ctx.beginPath();
-			ctx.moveTo(x, y);
+
+			const isTransparent = state.cursor === PaintCursor.Eraser;
+			if (isTransparent) {
+				// empty
+			} else {
+				ctxO.beginPath();
+				ctxO.moveTo(x, y);					
+			}
+
+			this.prevState = { x, y };
 
 			ctx.beginPath();
-			ctxO.moveTo(x, y);
+			ctx.moveTo(x, y);
 
 			// cursorDisp.set(true);
 			// cursorX.set(x);
@@ -174,12 +187,26 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			// });
 
 			if (isTransparent) {
+				const prevX = this.prevState.x;
+				const prevY = this.prevState.y;
+				const angle = Math.PI / 2 + Math.atan2(x - prevX, y - prevY);
+				ctxO.save();
+				ctxO.beginPath();
+				ctxO.arc(prevX, prevY, state.size / 2, angle, angle + Math.PI);
+				ctxO.arc(x, y, state.size / 2, angle + Math.PI, angle);
+				ctxO.closePath();
+				ctxO.rect(0, 0, this.mainLayer.current!.width, this.mainLayer.current!.height);
+				ctxO.clip("evenodd");
+
+				ctxO.restore();
 				// TODO::호를 활용
-				ctxO.clearRect(x, y, state.size, state.size);
+				// ctxO.clearRect(x, y, state.size, state.size);
 			} else {
 				ctxO.lineTo(x, y);
 				ctxO.stroke();
 			}
+
+			this.prevState = {x, y};
 
 			ctx.lineTo(x, y);
 			ctx.stroke();
@@ -239,17 +266,15 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			// });
 
 			if (isTransparent) {
-				ctxO.clearRect(x, y, state.size, state.size);
+
+				// ctxO.clearRect(x, y, state.size, state.size);
 			} else {
 				ctxO.lineTo(x, y);
 				ctxO.stroke();
-				ctx.closePath();
 			}
 
 			ctx.lineTo(x, y);
 			ctx.stroke();
-			ctx.closePath();
-			
 			
 			ctx.clearRect(0, 0, cWidth, cHeight);
 			// readyState.set(PaintReadyState.Ended);
