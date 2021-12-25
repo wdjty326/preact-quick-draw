@@ -1,7 +1,7 @@
 import { Fragment, Component, h, createRef } from "preact";
 import { useRef, useEffect } from "preact/hooks";
 import { isPassive, objState } from "../libs";
-import { PaintCursorState, PaintLocation, PaintReadyState } from "../defines/paint";
+import { PaintCursor, PaintLocation, PaintReadyState } from "../defines/paint";
 
 import "./canvas.scss";
 
@@ -10,17 +10,16 @@ const cHeight = 1080; // document.documentElement.clientHeight;
 
 
 interface CanvasProps {
-	readyState: PaintReadyState;
+	// readyState: PaintReadyState;
 
-	renderData: PaintLocation[];
-	renderStartCursor: number;
-	renderCursor: number;
+	// renderData: PaintLocation[];
+	// renderStartCursor: number;
+	// renderCursor: number;
 
-	cursorState: PaintCursorState;
+	// rootData: number[];
+	// rootCursor: number;
 
-	rootData: number[];
-	rootCursor: number;
-
+	cursor: PaintCursor;
 	size: number;
 	radius: "round" | "square";
 	color: string;
@@ -29,6 +28,12 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 	private mainLayer;
 	private paintingLayer;
 
+	private readyState: PaintReadyState = PaintReadyState.Ready;
+
+	private renderData: PaintLocation[] = [];
+	private renderCursor = 0;
+	private renderStartCursor = 0;
+
 	constructor () {
 		super();
 
@@ -36,16 +41,16 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		this.paintingLayer = createRef<HTMLCanvasElement>();
 
 		this.state = {
-			renderData: [],
+			// renderData: [],
 			color: "#0d6efd",
 			size: 10,
-			rootData: [],
-			rootCursor: 0,
-			cursorState: PaintCursorState.Pen,
+			// rootData: [],
+			// rootCursor: 0,
+			cursor: PaintCursor.Pen,
 			radius: "round",
-			readyState: PaintReadyState.Ready,
-			renderCursor: 0,
-			renderStartCursor: 0,
+			// readyState: PaintReadyState.Ready,
+			// renderCursor: 0,
+			// renderStartCursor: 0,
 		};
 	}
 
@@ -53,17 +58,25 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		e.preventDefault();
 		const state = this.state;
 
-		if ("button" in e && e.button) return;	// 버튼을 누른상태에서 이벤트 발생 무시
-		if (e.currentTarget) {
-			if (state.readyState !== PaintReadyState.Ready) return;
-	
-			const target = e.currentTarget as HTMLCanvasElement;
-			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
-
+		const setSrokeStyle = (ctx: CanvasRenderingContext2D): void => {
 			ctx.strokeStyle = state.color;
 			ctx.lineCap = state.radius;
 			ctx.lineJoin = "round";
 			ctx.lineWidth = state.size;
+		};
+
+		if ("button" in e && e.button) return;	// 버튼을 누른상태에서 이벤트 발생 무시
+		if (e.currentTarget) {
+			if (this.readyState !== PaintReadyState.Ready) return;
+	
+			const target = e.currentTarget as HTMLCanvasElement;
+			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
+
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+			const ctxO = this.mainLayer.current!.getContext("2d")!;
+
+			setSrokeStyle(ctx);
+			setSrokeStyle(ctxO);
 
 			let x, y;
 			const rect = target.getBoundingClientRect();
@@ -78,34 +91,36 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			x = Math.round(x * target.width / target.offsetWidth);
 			y = Math.round(y * target.height / target.offsetHeight);
 
-			const renderData = state.renderData;
+			const renderData = this.renderData;
 			renderData.push({
 				x,
 				y,
 				color: state.color,
 				size: state.size,
 				isRoot: true,
-				isTransparent: state.cursorState === PaintCursorState.Eraser,
+				isTransparent: state.cursor === PaintCursor.Eraser,
 			});
 			const cursor = renderData.length - 1;
 
-			const rootData = state.rootData;
-			rootData.push(cursor);
+			this.renderCursor = cursor;
+			this.renderStartCursor = cursor;
+			this.readyState = PaintReadyState.Play;
 
-			const rootCursor = rootData.length;
+			// this.setState({
+			// 	renderData,
+			// 	renderCursor: cursor,
+			// 	renderStartCursor: cursor,
 
-			this.setState({
-				renderData,
-				renderCursor: cursor,
-				renderStartCursor: cursor,
-
-				rootData,
-				rootCursor,
-				readyState: PaintReadyState.Play,
-			});
+			// 	rootData,
+			// 	rootCursor,
+			// 	readyState: PaintReadyState.Play,
+			// });
 
 			ctx.beginPath();
 			ctx.moveTo(x, y);
+
+			ctx.beginPath();
+			ctxO.moveTo(x, y);
 
 			// cursorDisp.set(true);
 			// cursorX.set(x);
@@ -118,10 +133,13 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		const state = this.state;
 
 		if (e.currentTarget) {
-			if (state.readyState !== PaintReadyState.Play) return;
+			if (this.readyState !== PaintReadyState.Play) return;
 
 			const target = e.currentTarget as HTMLCanvasElement;
 			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
+
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+			const ctxO = this.mainLayer.current!.getContext("2d")!;
 
 			let x, y;
 			const rect = target.getBoundingClientRect();
@@ -136,9 +154,9 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			x = Math.round(x * target.width / target.offsetWidth);
 			y = Math.round(y * target.height / target.offsetHeight);
 
-			const isTransparent = state.cursorState === PaintCursorState.Eraser;
+			const isTransparent = state.cursor === PaintCursor.Eraser;
 
-			const renderData = state.renderData;
+			const renderData = this.renderData;
 			renderData.push({
 				x,
 				y,
@@ -148,19 +166,23 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 				isTransparent,
 			});
 
-			this.setState({
-				renderData,
-				renderCursor: renderData.length - 1,
-			});
+			this.renderCursor = renderData.length - 1;
+
+			// this.setState({
+			// 	renderData,
+			// 	renderCursor: renderData.length - 1,
+			// });
 
 			if (isTransparent) {
-				const mainLayer = this.mainLayer.current!;
-				const mainCtx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
-				mainCtx.clearRect(x, y, state.size, state.size);
+				// TODO::호를 활용
+				ctxO.clearRect(x, y, state.size, state.size);
 			} else {
-				ctx.lineTo(x, y);
-				ctx.stroke();
+				ctxO.lineTo(x, y);
+				ctxO.stroke();
 			}
+
+			ctx.lineTo(x, y);
+			ctx.stroke();
 
 			// cursorDisp.set(true);
 			// cursorX.set(x);
@@ -173,10 +195,13 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		const state = this.state;
 
 		if (e.currentTarget) {
-			if (state.readyState !== PaintReadyState.Play) return;
+			if (this.readyState !== PaintReadyState.Play) return;
 
 			const target = e.currentTarget as HTMLCanvasElement;
 			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
+
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+			const ctxO = this.mainLayer.current!.getContext("2d")!;
 
 			let x, y;
 			const rect = target.getBoundingClientRect();
@@ -191,9 +216,9 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			x = Math.round(x * target.width / target.offsetWidth);
 			y = Math.round(y * target.height / target.offsetHeight);
 
-			const isTransparent = state.cursorState === PaintCursorState.Eraser;
+			const isTransparent = state.cursor === PaintCursor.Eraser;
 
-			const renderData = state.renderData;
+			const renderData = this.renderData;
 			renderData.push({
 				x,
 				y,
@@ -202,32 +227,39 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 				isRoot: false,
 				isTransparent,
 			});
-			
-			this.setState({
-				renderData,
-				renderCursor: renderData.length - 1,
+
+			this.renderCursor = renderData.length - 1;
+			this.readyState = PaintReadyState.Ready;
+
+			// this.setState({
+			// 	renderData,
+			// 	renderCursor: renderData.length - 1,
 				
-				readyState: PaintReadyState.Ready,
-			});
+			// 	readyState: PaintReadyState.Ready,
+			// });
 
 			if (isTransparent) {
-				const mainLayer = this.mainLayer.current!;
-				const mainCtx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
-				mainCtx.clearRect(x, y, state.size, state.size);
+				ctxO.clearRect(x, y, state.size, state.size);
 			} else {
-				ctx.lineTo(x, y);
-				ctx.stroke();
+				ctxO.lineTo(x, y);
+				ctxO.stroke();
+				ctx.closePath();
 			}
+
+			ctx.lineTo(x, y);
+			ctx.stroke();
 			ctx.closePath();
+			
+			
+			ctx.clearRect(0, 0, cWidth, cHeight);
 			// readyState.set(PaintReadyState.Ended);
 
-			const mainLayer = this.mainLayer.current;
+			// const mainLayer = this.mainLayer.current;
 
-			if (mainLayer) {
-				const mainCtx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
-				mainCtx.drawImage(target, 0, 0, cWidth, cHeight);
-				ctx.clearRect(0, 0, cWidth, cHeight);
-			}
+			// if (mainLayer) {
+			// 	const mainCtx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
+			// 	mainCtx.drawImage(target, 0, 0, cWidth, cHeight);
+			// }
 
 			// cursorDisp.set(true);
 			// cursorX.set(x);
@@ -246,8 +278,8 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 			ctx.lineJoin = "round";
 
 			ctx.beginPath();
-			for (let i = 0; i < state.renderCursor; i++) {
-				const data = state.renderData[i];
+			for (let i = 0; i < this.renderCursor; i++) {
+				const data = this.renderData[i];
 				if (data.isRoot) {
 					if (i !== 0) {
 						ctx.stroke();
@@ -277,13 +309,15 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		// 		renderCursor: cursor,
 		// 	});
 		// }
-		let i = this.state.renderCursor;
+		let i = this.renderCursor;
 		for (; i > 0; i--) {
-			if (this.state.renderData[i].isRoot) break;
+			if (this.renderData[i].isRoot) break;
 		}
-		this.setState({ renderCursor: i > 0 ? i - 1 : 0 }, () => {
-			this.reload();
-		});
+		this.renderCursor = i > 0 ? i - 1 : 0;
+		this.reload();
+		// this.setState({ renderCursor: i > 0 ? i - 1 : 0 }, () => {
+		// 	this.reload();
+		// });
 	};
 
 	redo = (): void => {
@@ -296,35 +330,40 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 		// 		renderCursor: cursor,
 		// 	});
 		// }
-		const renderLength = this.state.renderData.length;
-		let i = this.state.renderCursor + 2;
+		const renderLength = this.renderData.length;
+		let i = this.renderCursor + 2;
 		for (; i < renderLength; i++) {
-			if (this.state.renderData[i].isRoot) break;
+			if (this.renderData[i].isRoot) break;
 		}
-		this.setState({ renderCursor: (i < renderLength ? i : renderLength) - 1 }, () => {
-			this.reload();
-		});
+		this.renderCursor = (i < renderLength ? i : renderLength) - 1;
+		this.reload();
+		// this.setState({ renderCursor: (i < renderLength ? i : renderLength) - 1 }, () => {
+		// 	this.reload();
+		// });
 	};
 
 	clear = (): void => {
-		this.setState({
-			renderCursor: 0,
-			renderStartCursor: 0,
-			renderData: [],
+		// this.setState({
+		// 	renderCursor: 0,
+		// 	renderStartCursor: 0,
+		// 	renderData: [],
 
-			rootCursor: 0,
-			rootData: [],
-		});
+		// 	rootCursor: 0,
+		// 	rootData: [],
+		// });
+		this.renderCursor = 0;
+		this.renderStartCursor = 0;
+		this.renderData.length = 0;
 
 		this.reload();
 	};
 
 	SpoidColor = (e: MouseEvent | TouchEvent): void => {
 		const state = this.state;
-		if (state.cursorState === PaintCursorState.Spoid) {
+		if (state.cursor === PaintCursor.Spoid) {
 			e.preventDefault();
 			if (e.currentTarget) {
-				if (state.readyState !== PaintReadyState.Ready) return;
+				if (this.readyState !== PaintReadyState.Ready) return;
 		
 				const target = e.currentTarget as HTMLCanvasElement;
 				const ctx = target.getContext("2d") as CanvasRenderingContext2D;
@@ -406,20 +445,21 @@ export default class Canvas extends Component<unknown, CanvasProps> {
 					height={cHeight}
 					ref={this.paintingLayer}
 					style={{
-						display: state.cursorState === PaintCursorState.Spoid ? "none" : "block",
+						display: state.cursor === PaintCursor.Spoid ? "none" : "block",
+						opacity: 0,
 					}}
 					onMouseDown={this.mousedown}
 					onMouseMove={this.mousemove}
 					onMouseUp={this.mouseup}
 				/>
 			</div>
-			<button onClick={(): void => this.setState({ cursorState: PaintCursorState.Pen })}>
+			<button onClick={(): void => this.setState({ cursor: PaintCursor.Pen })}>
 				Pen
 			</button>
-			<button onClick={(): void => this.setState({ cursorState: PaintCursorState.Spoid })}>
+			<button onClick={(): void => this.setState({ cursor: PaintCursor.Spoid })}>
 				Spoid
 			</button>
-			<button onClick={(): void => this.setState({ cursorState: PaintCursorState.Eraser })}>
+			<button onClick={(): void => this.setState({ cursor: PaintCursor.Eraser })}>
 				Eraser
 			</button>
 			<input type="input" value={state.color} onInput={(e): void => {

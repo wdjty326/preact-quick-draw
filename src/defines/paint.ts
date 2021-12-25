@@ -13,7 +13,7 @@ export enum PaintReadyState {
 	Ended = "ended",
 }
 
-export enum PaintCursorState {
+export enum PaintCursor {
 	Pen = "pen",
 	Spoid = "spoid",
 	Eraser = "eraser",
