@@ -1,4 +1,4 @@
-import { Fragment, Component, h, createRef } from "preact";
+import { Fragment, Component, h, createRef, RefObject } from "preact";
 import { isPassive } from "../libs";
 import { PaintCursor, PaintLayer, PaintLocation, PaintReadyState } from "../defines/paint";
 import { LAYER_FLAG_KEY } from "../defines/const";
@@ -21,7 +21,10 @@ interface CanvasState {
 export default class Canvas extends Component<CanvasProps, CanvasState> {
 	private mainLayer;
 	private paintingLayer;
-	private activeLayer;
+
+	private activeLayer: {
+		[key: string]: RefObject<HTMLCanvasElement>;
+	} = {};
 
 	private readyState: PaintReadyState = PaintReadyState.Ready;
 
@@ -33,7 +36,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 		this.mainLayer  = createRef<HTMLCanvasElement>();
 		this.paintingLayer = createRef<HTMLCanvasElement>();
-		this.activeLayer = createRef<HTMLCanvasElement>();
 
 		const layer: PaintLayer = {
 			id: `${LAYER_FLAG_KEY}${Date.now()}`,
@@ -41,6 +43,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		};
 		this.renderData[layer.id] = [];
 		this.renderCursor[layer.id] = 0;
+		this.activeLayer[layer.id] = createRef<HTMLCanvasElement>();
 
 		this.state = {
 			color: "#0d6efd",
@@ -74,12 +77,13 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		if ("button" in e && e.button) return;	// 버튼을 누른상태에서 이벤트 발생 무시
 		if (e.currentTarget) {
 			if (this.readyState !== PaintReadyState.Ready) return;
-	
+			const currentLayer = state.currentLayer;
+			
 			const target = e.currentTarget as HTMLCanvasElement;
 			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
 
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			const ctxA = this.activeLayer.current!.getContext("2d")!;
+			const ctxA = this.activeLayer[currentLayer.id].current!.getContext("2d")!;
 			// const ctxO = this.mainLayer.current!.getContext("2d")!;
 
 			setStrokeStyle(ctx);
@@ -101,7 +105,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			const isTransparent = state.cursor === PaintCursor.Eraser;
 
-			const currentLayer = state.currentLayer;
 			let renderData = this.renderData[currentLayer.id];
 			if (typeof renderData === "undefined") {
 				this.renderData[currentLayer.id] = [];
@@ -149,12 +152,13 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 		if (e.currentTarget) {
 			if (this.readyState !== PaintReadyState.Play) return;
-
+			const currentLayer = state.currentLayer;
+			
 			const target = e.currentTarget as HTMLCanvasElement;
 			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
 
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			const ctxA = this.activeLayer.current!.getContext("2d")!;
+			const ctxA = this.activeLayer[currentLayer.id].current!.getContext("2d")!;
 			// const ctxO = this.mainLayer.current!.getContext("2d")!;
 			
 			let x, y;
@@ -172,7 +176,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			const isTransparent = state.cursor === PaintCursor.Eraser;
 
-			const currentLayer = state.currentLayer;
 			const renderData = this.renderData[currentLayer.id];
 			renderData.push({
 				x,
@@ -187,14 +190,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			this.renderCursor[currentLayer.id] = renderData.length - 1;
 
-			// if (isTransparent) {
-			// 	// ctxO.lineTo(x, y);
-			// 	// ctxO.stroke();
-
-			// 	ctxA.lineTo(x, y);
-			// 	ctxA.stroke();
-			// } else {
-			// }
 			ctxA.lineTo(x, y);
 			ctxA.stroke();
 		
@@ -209,12 +204,13 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 		if (e.currentTarget) {
 			if (this.readyState !== PaintReadyState.Play) return;
-
+			const currentLayer = state.currentLayer;
+			
 			const target = e.currentTarget as HTMLCanvasElement;
 			const ctx = target.getContext("2d") as CanvasRenderingContext2D;
 
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			const ctxA = this.activeLayer.current!.getContext("2d")!;
+			const ctxA = this.activeLayer[currentLayer.id].current!.getContext("2d")!;
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			const ctxO = this.mainLayer.current!.getContext("2d")!;
 
@@ -233,7 +229,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			const isTransparent = state.cursor === PaintCursor.Eraser;
 
-			const currentLayer = state.currentLayer;
 			const renderData = this.renderData[currentLayer.id];
 			renderData.push({
 				x,
@@ -249,12 +244,6 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			this.renderCursor[currentLayer.id] = renderData.length - 1;
 			this.readyState = PaintReadyState.Ready;
 
-			// if (isTransparent) {
-			// 	ctxA.lineTo(x, y);
-			// 	ctxA.stroke();
-			// 	ctxA.restore();
-			// } else {
-			// }
 			ctxA.lineTo(x, y);
 			ctxA.stroke();
 			isTransparent && ctxA.restore();
@@ -274,18 +263,18 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		const state = this.state;
 		if (mainLayer) {
 			const ctx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
-			const ctxA = (this.activeLayer.current as HTMLCanvasElement).getContext("2d") as CanvasRenderingContext2D;
+			let data: PaintLocation | null = null;
 
 			ctx.clearRect(0, 0, mainLayer.width, mainLayer.height);
-			ctxA.clearRect(0, 0, this.props.cWidth, this.props.cHeight);
-
 			ctx.lineJoin = "round";
-			ctxA.lineJoin = "round";
-
-			let data: PaintLocation | null = null;
 			ctx.beginPath();
-			ctxA.beginPath();
 			state.allLayer.forEach((layer) => {
+				const ctxA = (this.activeLayer[layer.id].current as HTMLCanvasElement).getContext("2d") as CanvasRenderingContext2D;
+
+				ctxA.clearRect(0, 0, this.props.cWidth, this.props.cHeight);
+				ctxA.lineJoin = "round";
+				ctxA.beginPath();
+
 				for (let cursor = 0; cursor < this.renderCursor[layer.id]; cursor++) {
 					data = this.renderData[layer.id][cursor];
 					if (data.isRoot) {
@@ -321,12 +310,12 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 						ctxA.lineTo(data.x, data.y);
 					}
 				}
+				
+				ctxA.stroke();
+				(data as unknown as PaintLocation)?.isTransparent && ctxA.restore();
 			});
 			ctx.stroke();
 			(data as unknown as PaintLocation)?.isTransparent && ctx.restore();
-
-			ctxA.stroke();
-			(data as unknown as PaintLocation)?.isTransparent && ctxA.restore();
 		}
 	};
 
@@ -407,6 +396,39 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		}
 	};
 
+	createLayer = (): void => {
+		const id = `${LAYER_FLAG_KEY}${Date.now()}`;
+		this.setState((state) => {
+			const allLayer = state.allLayer;
+			allLayer.push({
+				id,
+				name: `Layer ${allLayer.length + 1}`,
+			});
+			return {
+				allLayer,
+			};
+		}, () => {
+			this.renderData[id] = [];
+			this.renderCursor[id] = 0;
+			this.activeLayer[id] = createRef<HTMLCanvasElement>();
+		});
+	};
+
+	deleteLayer = (layerId: string): void => {
+		this.setState((state) => {
+			const allLayer = state.allLayer;
+			const idx = allLayer.findIndex((layer) => layer.id === layerId);
+			if (idx > -1) allLayer.splice(idx, 1); 
+			return {
+				allLayer,
+			};
+		}, () => {
+			this.renderData[layerId] && delete this.renderData[layerId];
+			this.renderCursor[layerId] && delete this.renderCursor[layerId];
+			this.activeLayer[layerId] && delete this.activeLayer[layerId];
+		});
+	}
+
 	componentDidMount (): void {
 		const paintingLayer = this.paintingLayer.current;
 		if (paintingLayer) {
@@ -448,10 +470,13 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 						height={props.cHeight}
 						ref={this.mainLayer}
 						// onClick={this.SpoidColor}
+						style={{
+							opacity: 0,
+						}}
 					/>
 					{ state.allLayer.map((layer) => <canvas
 						class="active_layer"
-						ref={layer.id === state.currentLayer.id ? this.activeLayer : undefined}
+						ref={this.activeLayer[layer.id]}
 						key={layer.id}
 						width={props.cWidth}
 						height={props.cHeight}
@@ -507,16 +532,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				</button>
 			</div>
 			<div id="layer_menu">
-				<button onClick={(): void => this.setState((state) => {
-					const allLayer = state.allLayer;
-					allLayer.push({
-						id: `${LAYER_FLAG_KEY}${Date.now()}`,
-						name: `Layer ${allLayer.length + 1}`,
-					});
-					return {
-						allLayer,
-					};
-				})}>
+				<button onClick={(): void => this.createLayer()}>
 					Create
 				</button>
 				<button data-theme="green" onClick={(): void => this.setState((state) => {
@@ -554,16 +570,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 						})}
 					>
 						{layer.name}
-						<span onClick={(): void => {
-							this.setState((state) => {
-								const allLayer = state.allLayer;
-								const idx = allLayer.findIndex((layer2) => layer.id === layer2.id);
-								if (idx > -1) allLayer.splice(idx, 1);
-								return {
-									allLayer,
-								};
-							});
-						}}>삭제</span>
+						<span onClick={(): void => this.deleteLayer(layer.id)}>삭제</span>
 					</li>)}
 				</ul>
 			</div>
