@@ -26,7 +26,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 	private readyState: PaintReadyState = PaintReadyState.Ready;
 
 	private renderData: { [key: string]: PaintLocation[] } = {};
-	private renderCursor = 0;
+	private renderCursor: { [key: string]: number } = {};
 
 	constructor () {
 		super();
@@ -40,6 +40,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			name: "Layer 1",
 		};
 		this.renderData[layer.id] = [];
+		this.renderCursor[layer.id] = 0;
 
 		this.state = {
 			color: "#0d6efd",
@@ -60,7 +61,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 	};
 
 	mousedown = (e: MouseEvent | TouchEvent): void => {
-		e.preventDefault();
+		if (e.cancelable) e.preventDefault();
 		const state = this.state;
 
 		const setStrokeStyle = (ctx: CanvasRenderingContext2D): void => {
@@ -101,10 +102,20 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			const isTransparent = state.cursor === PaintCursor.Eraser;
 
 			const currentLayer = state.currentLayer;
-			const renderData = this.renderData[currentLayer.id];
+			let renderData = this.renderData[currentLayer.id];
+			if (typeof renderData === "undefined") {
+				this.renderData[currentLayer.id] = [];
+				renderData = [];
+			}
+			let renderCursor = this.renderCursor[currentLayer.id];
+			if (typeof renderCursor === "undefined") {
+				this.renderCursor[currentLayer.id] = 0;
+				renderCursor = 0;	
+			}
+
 			renderData.splice(
-				this.renderCursor,
-				renderData.length - this.renderCursor,
+				renderCursor,
+				renderData.length - renderCursor,
 				{
 					x,
 					y,
@@ -117,7 +128,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				});
 			const cursor = renderData.length - 1;
 
-			this.renderCursor = cursor;
+			this.renderCursor[currentLayer.id] = cursor;
 			this.readyState = PaintReadyState.Play;
 
 			if (isTransparent) {
@@ -148,9 +159,9 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			
 			let x, y;
 			const rect = target.getBoundingClientRect();
-			if ("touches" in e) {
-				x = e.touches[0].clientX - rect.left;
-				y = e.touches[0].clientY - rect.top;
+			if ("changedTouches" in e) {
+				x = e.changedTouches[0].clientX - rect.left;
+				y = e.changedTouches[0].clientY - rect.top;
 			} else {
 				x = e.clientX - rect.left;
 				y = e.clientY - rect.top;
@@ -174,7 +185,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				layerId: state.currentLayer.id,
 			});
 
-			this.renderCursor = renderData.length - 1;
+			this.renderCursor[currentLayer.id] = renderData.length - 1;
 
 			// if (isTransparent) {
 			// 	// ctxO.lineTo(x, y);
@@ -193,7 +204,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 	};
 
 	mouseup = (e: MouseEvent | TouchEvent): void => {
-		e.preventDefault();
+		if (e.cancelable) e.preventDefault();
 		const state = this.state;
 
 		if (e.currentTarget) {
@@ -204,13 +215,14 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			const ctxA = this.activeLayer.current!.getContext("2d")!;
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			const ctxO = this.mainLayer.current!.getContext("2d")!;
 
 			let x, y;
 			const rect = target.getBoundingClientRect();
-			if ("touches" in e) {
-				x = e.touches[0].clientX - rect.left;
-				y = e.touches[0].clientY - rect.top;
+			if ("changedTouches" in e) {
+				x = e.changedTouches[0].clientX - rect.left;
+				y = e.changedTouches[0].clientY - rect.top;
 			} else {
 				x = e.clientX - rect.left;
 				y = e.clientY - rect.top;
@@ -234,7 +246,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				layerId: state.currentLayer.id,
 			});
 
-			this.renderCursor = renderData.length - 1;
+			this.renderCursor[currentLayer.id] = renderData.length - 1;
 			this.readyState = PaintReadyState.Ready;
 
 			// if (isTransparent) {
@@ -262,63 +274,84 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		const state = this.state;
 		if (mainLayer) {
 			const ctx = mainLayer.getContext("2d") as CanvasRenderingContext2D;
+			const ctxA = (this.activeLayer.current as HTMLCanvasElement).getContext("2d") as CanvasRenderingContext2D;
+
 			ctx.clearRect(0, 0, mainLayer.width, mainLayer.height);
+			ctxA.clearRect(0, 0, this.props.cWidth, this.props.cHeight);
 
 			ctx.lineJoin = "round";
+			ctxA.lineJoin = "round";
+
 			let data: PaintLocation | null = null;
 			ctx.beginPath();
+			ctxA.beginPath();
 			state.allLayer.forEach((layer) => {
-				for (let cursor = 0; cursor < this.renderCursor; cursor++) {
+				for (let cursor = 0; cursor < this.renderCursor[layer.id]; cursor++) {
 					data = this.renderData[layer.id][cursor];
 					if (data.isRoot) {
 						if (cursor !== 0) {
 							ctx.stroke();
 							data.isTransparent && ctx.restore();
 							ctx.beginPath();
+
+							ctxA.stroke();
+							data.isTransparent && ctxA.restore();
+							ctxA.beginPath();
 						}
 						if (data.isTransparent) {
 							ctx.save();
 							ctx.globalCompositeOperation = "destination-out";
+							ctxA.save();
+							ctxA.globalCompositeOperation = "destination-out";
 						}
 	
 						ctx.strokeStyle = data.color;
 						ctx.lineWidth = data.size;
 						ctx.lineCap = state.radius;
-	
+					
+						ctxA.strokeStyle = data.color;
+						ctxA.lineWidth = data.size;
+						ctxA.lineCap = state.radius;
+					
 						ctx.moveTo(data.x, data.y);
+						ctxA.moveTo(data.x, data.y);
 					}
-					else ctx.lineTo(data.x, data.y);
+					else {
+						ctx.lineTo(data.x, data.y);
+						ctxA.lineTo(data.x, data.y);
+					}
 				}
 			});
 			ctx.stroke();
 			(data as unknown as PaintLocation)?.isTransparent && ctx.restore();
+
+			ctxA.stroke();
+			(data as unknown as PaintLocation)?.isTransparent && ctxA.restore();
 		}
 	};
 
 	undo = (): void => {
 		const currentLayer = this.state.currentLayer;
-		let i = this.renderCursor;
+		let i = this.renderCursor[currentLayer.id];
 		for (; i > 0; i--) {
 			if (this.renderData[currentLayer.id][i].isRoot) break;
 		}
-		this.renderCursor = i > 0 ? i - 1 : 0;
+		this.renderCursor[currentLayer.id] = i > 0 ? i - 1 : 0;
 		this.reload();
 	};
 
 	redo = (): void => {
 		const currentLayer = this.state.currentLayer;
 		const renderLength = this.renderData[currentLayer.id].length;
-		let i = this.renderCursor + 2;
+		let i = this.renderCursor[currentLayer.id] + 2;
 		for (; i < renderLength; i++) {
 			if (this.renderData[currentLayer.id][i].isRoot) break;
 		}
-		this.renderCursor = (i < renderLength ? i : renderLength) - 1;
+		this.renderCursor[currentLayer.id] = (i < renderLength ? i : renderLength) - 1;
 		this.reload();
 	};
 
 	clear = (): void => {
-		this.renderCursor = 0;
-
 		const layer: PaintLayer = {
 			id: `${LAYER_FLAG_KEY}${Date.now()}`,
 			name: "Layer 1",
@@ -326,6 +359,10 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		this.renderData = {
 			[layer.id]: [],
 		};
+		this.renderCursor = {
+			[layer.id]: 0,
+		};
+
 
 		this.reload();
 	};
@@ -403,65 +440,133 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 	render (props: Readonly<CanvasProps>, state: Readonly<CanvasState>): h.JSX.Element {
 		return <>
-			<div id="painting_canvas">
-				<canvas
-					id="main_layer"
-					width={props.cWidth}
-					height={props.cHeight}
-					ref={this.mainLayer}
-					// onClick={this.SpoidColor}
-				/>
-				{ state.allLayer.map((layer) => <canvas
-					class="active_layer"
-					ref={layer.id === state.currentLayer.id ? this.activeLayer : undefined}
-					key={layer.id}
-					width={props.cWidth}
-					height={props.cHeight}
-					onClick={this.SpoidColor}
-				/> )}
-				<canvas
-					id="painting_layer"
-					width={props.cWidth}
-					height={props.cHeight}
-					ref={this.paintingLayer}
-					style={{
-						display: state.cursor === PaintCursor.Spoid ? "none" : "block",
-						opacity: 0,
-					}}
-				/>
+			<div>
+				<div id="painting_canvas">
+					<canvas
+						id="main_layer"
+						width={props.cWidth}
+						height={props.cHeight}
+						ref={this.mainLayer}
+						// onClick={this.SpoidColor}
+					/>
+					{ state.allLayer.map((layer) => <canvas
+						class="active_layer"
+						ref={layer.id === state.currentLayer.id ? this.activeLayer : undefined}
+						key={layer.id}
+						width={props.cWidth}
+						height={props.cHeight}
+						onClick={this.SpoidColor}
+					/> )}
+					<canvas
+						id="painting_layer"
+						width={props.cWidth}
+						height={props.cHeight}
+						ref={this.paintingLayer}
+						style={{
+							display: state.cursor === PaintCursor.Spoid ? "none" : "block",
+							opacity: 0,
+						}}
+					/>
+				</div>
 			</div>
-			<button onClick={(): void => this.setState({ cursor: PaintCursor.Pen })}>
-				Pen
-			</button>
-			<button onClick={(): void => this.setState({ cursor: PaintCursor.Spoid })}>
-				Spoid
-			</button>
-			<button onClick={(): void => this.setState({ cursor: PaintCursor.Eraser })}>
-				Eraser
-			</button>
-			<input type="input" value={state.color} onInput={(e): void => {
-				const target = e.target as HTMLInputElement;
-				this.setState({ color: target.value });
-			}} />
-			<input type="input" value={state.size} onInput={(e): void => {
-				const target = e.target as HTMLInputElement;
-				this.setState({ size: parseInt(target.value, 10) });
-			}} />
-			<button onClick={(): void => this.setState({ radius: "round" })}>
-				Round
-			</button>
-			<button onClick={(): void => this.setState({ radius: "square" })}>
-				Square
-			</button>
-			<button onClick={(): void => this.undo()}>
-				Undo
-			</button>
-			<button onClick={(): void => this.redo()}>
-				Redo
-			</button>
-			<button onClick={(): void => this.clear()}>
-				Clear
-			</button>
+			<div id="tool_menu">
+				<button data-theme="purple" onClick={(): void => this.setState({ cursor: PaintCursor.Pen })}>
+					Pen
+				</button>
+				<button data-theme="purple" onClick={(): void => this.setState({ cursor: PaintCursor.Spoid })}>
+					Spoid
+				</button>
+				<button data-theme="purple" onClick={(): void => this.setState({ cursor: PaintCursor.Eraser })}>
+					Eraser
+				</button>
+				<div class="colorful">
+					<input type="input" maxLength={7} value={state.color} onInput={(e): void => {
+						const target = e.target as HTMLInputElement;
+						this.setState({ color: target.value });
+					}} />
+					<span class="preview_colorful" style={`background: ${state.color}`} />
+				</div>	
+				<input type="number" min={0} max={100} maxLength={3} value={state.size} onInput={(e): void => {
+					const target = e.target as HTMLInputElement;
+					this.setState({ size: parseInt(target.value, 10) });
+				}} />
+				<button data-theme="green" onClick={(): void => this.setState({ radius: "round" })}>
+					Round
+				</button>
+				<button data-theme="green" onClick={(): void => this.setState({ radius: "square" })}>
+					Square
+				</button>
+				<button onClick={(): void => this.undo()}>
+					Undo
+				</button>
+				<button onClick={(): void => this.redo()}>
+					Redo
+				</button>
+				<button onClick={(): void => this.clear()}>
+					Clear
+				</button>
+			</div>
+			<div id="layer_menu">
+				<button onClick={(): void => this.setState((state) => {
+					const allLayer = state.allLayer;
+					allLayer.push({
+						id: `${LAYER_FLAG_KEY}${Date.now()}`,
+						name: `Layer ${allLayer.length + 1}`,
+					});
+					return {
+						allLayer,
+					};
+				})}>
+					Create
+				</button>
+				<button data-theme="green" onClick={(): void => this.setState((state) => {
+					const allLayer = state.allLayer;
+					const idx = allLayer.findIndex((layer2) => state.currentLayer.id === layer2.id);
+					if (idx > -1 && idx > 0) {
+						const target = allLayer.splice(idx, 1)[0];
+						allLayer.splice(idx - 1, 0, target);
+					}
+					return {
+						allLayer,
+					};
+				}, () => this.reload())}>
+					UP
+				</button>
+				<button data-theme="green"  onClick={(): void => this.setState((state) => {
+					const allLayer = state.allLayer;
+					const idx = allLayer.findIndex((layer2) => state.currentLayer.id === layer2.id);
+					if (idx > -1 && idx < allLayer.length - 1) {
+						const target = allLayer.splice(idx, 1)[0];
+						allLayer.splice(idx + 1, 0, target);
+					}
+					return {
+						allLayer,
+					};
+				}, () => this.reload())}>
+					DOWN
+				</button>
+				<ul>
+					{ state.allLayer.map((layer) => <li
+						key={layer.id}
+						class={`layer_item ${layer.id === state.currentLayer.id ? "selected" : ""}`}
+						onClick={(): void => this.setState({
+							currentLayer: layer,
+						})}
+					>
+						{layer.name}
+						<span onClick={(): void => {
+							this.setState((state) => {
+								const allLayer = state.allLayer;
+								const idx = allLayer.findIndex((layer2) => layer.id === layer2.id);
+								if (idx > -1) allLayer.splice(idx, 1);
+								return {
+									allLayer,
+								};
+							});
+						}}>삭제</span>
+					</li>)}
+				</ul>
+			</div>
 		</>;
 	}
 }

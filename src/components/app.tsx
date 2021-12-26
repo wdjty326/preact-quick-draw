@@ -1,7 +1,7 @@
 import { FunctionalComponent, h } from "preact";
 import Canvas from "./canvas";
 
-// import "./app.scss";
+import "./app.scss";
 
 const App: FunctionalComponent = () => {
 	return (
