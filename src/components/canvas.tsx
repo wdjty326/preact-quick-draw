@@ -129,7 +129,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 					isTransparent,
 					layerId: state.currentLayer.id,
 				});
-			const cursor = renderData.length - 1;
+			const cursor = renderData.length;
 
 			this.renderCursor[currentLayer.id] = cursor;
 			this.readyState = PaintReadyState.Play;
@@ -188,7 +188,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				layerId: state.currentLayer.id,
 			});
 
-			this.renderCursor[currentLayer.id] = renderData.length - 1;
+			this.renderCursor[currentLayer.id] = renderData.length;
 
 			ctxA.lineTo(x, y);
 			ctxA.stroke();
@@ -216,9 +216,9 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 			let x, y;
 			const rect = target.getBoundingClientRect();
-			if ("changedTouches" in e) {
-				x = e.changedTouches[0].clientX - rect.left;
-				y = e.changedTouches[0].clientY - rect.top;
+			if ("targetTouches" in e) {
+				x = e.targetTouches[0].clientX - rect.left;
+				y = e.targetTouches[0].clientY - rect.top;
 			} else {
 				x = e.clientX - rect.left;
 				y = e.clientY - rect.top;
@@ -241,7 +241,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				layerId: state.currentLayer.id,
 			});
 
-			this.renderCursor[currentLayer.id] = renderData.length - 1;
+			this.renderCursor[currentLayer.id] = renderData.length;
 			this.readyState = PaintReadyState.Ready;
 
 			ctxA.lineTo(x, y);
@@ -256,6 +256,15 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			
 			ctx.clearRect(0, 0, this.props.cWidth, this.props.cHeight);
 		}
+	};
+
+	mouseleave = (e: MouseEvent): void => {
+		if (this.readyState !== PaintReadyState.Play) return;
+		if (this.paintingLayer.current !== e.currentTarget) this.mouseup(e);
+	};
+
+	forceReload = (): void => {
+		this.forceUpdate(() => this.reload());
 	};
 
 	reload = (): void => {
@@ -321,23 +330,24 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 
 	undo = (): void => {
 		const currentLayer = this.state.currentLayer;
-		let i = this.renderCursor[currentLayer.id];
-		for (; i > 0; i--) {
+		let i = this.renderCursor[currentLayer.id] - 1;
+		for (; i >= 0; i--) {
 			if (this.renderData[currentLayer.id][i].isRoot) break;
 		}
-		this.renderCursor[currentLayer.id] = i > 0 ? i - 1 : 0;
-		this.reload();
+		this.renderCursor[currentLayer.id] = Math.max(i, 0);
+		this.forceReload();
 	};
 
 	redo = (): void => {
 		const currentLayer = this.state.currentLayer;
 		const renderLength = this.renderData[currentLayer.id].length;
-		let i = this.renderCursor[currentLayer.id] + 2;
+
+		let i = this.renderCursor[currentLayer.id] + 1;
 		for (; i < renderLength; i++) {
 			if (this.renderData[currentLayer.id][i].isRoot) break;
 		}
-		this.renderCursor[currentLayer.id] = (i < renderLength ? i : renderLength) - 1;
-		this.reload();
+		this.renderCursor[currentLayer.id] = Math.min(i, renderLength);
+		this.forceReload();
 	};
 
 	clear = (): void => {
@@ -353,13 +363,13 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 		};
 
 
-		this.reload();
+		this.forceReload();
 	};
 
 	SpoidColor = (e: MouseEvent | TouchEvent): void => {
+		e.preventDefault();
 		const state = this.state;
 		if (state.cursor === PaintCursor.Spoid) {
-			e.preventDefault();
 			if (e.currentTarget) {
 				if (this.readyState !== PaintReadyState.Ready) return;
 		
@@ -426,6 +436,8 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			this.renderData[layerId] && delete this.renderData[layerId];
 			this.renderCursor[layerId] && delete this.renderCursor[layerId];
 			this.activeLayer[layerId] && delete this.activeLayer[layerId];
+
+			this.forceReload();
 		});
 	}
 
@@ -440,6 +452,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			paintingLayer.addEventListener("mousedown", this.mousedown);
 			paintingLayer.addEventListener("mousemove", this.mousemove, passive);
 			paintingLayer.addEventListener("mouseup", this.mouseup);
+			document.addEventListener("mouseup", this.mouseleave);
 			
 			paintingLayer.addEventListener("touchstart", this.mousedown);
 			paintingLayer.addEventListener("touchmove", this.mousemove, passive);
@@ -453,6 +466,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 			paintingLayer.removeEventListener("mousedown", this.mousedown);
 			paintingLayer.removeEventListener("mousemove", this.mousemove);
 			paintingLayer.removeEventListener("mouseup", this.mouseup);
+			document.removeEventListener("mouseup", this.mouseleave);
 
 			paintingLayer.removeEventListener("touchstart", this.mousedown);
 			paintingLayer.removeEventListener("touchmove", this.mousemove);
@@ -463,13 +477,18 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 	render (props: Readonly<CanvasProps>, state: Readonly<CanvasState>): h.JSX.Element {
 		return <>
 			<div>
-				<div id="painting_canvas">
+				<div
+					id="painting_canvas"
+					onTouchMove={(e): void => {
+						// scroll issue
+						e.preventDefault();
+					}}
+				>
 					<canvas
 						id="main_layer"
 						width={props.cWidth}
 						height={props.cHeight}
 						ref={this.mainLayer}
-						// onClick={this.SpoidColor}
 						style={{
 							opacity: 0,
 						}}
@@ -481,6 +500,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 						width={props.cWidth}
 						height={props.cHeight}
 						onClick={this.SpoidColor}
+						onTouchStart={this.SpoidColor}
 					/> )}
 					<canvas
 						id="painting_layer"
@@ -538,7 +558,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				<button data-theme="green" onClick={(): void => this.setState((state) => {
 					const allLayer = state.allLayer;
 					const idx = allLayer.findIndex((layer2) => state.currentLayer.id === layer2.id);
-					if (idx > -1 && idx > 0) {
+					if (idx > 0) {
 						const target = allLayer.splice(idx, 1)[0];
 						allLayer.splice(idx - 1, 0, target);
 					}
@@ -551,7 +571,7 @@ export default class Canvas extends Component<CanvasProps, CanvasState> {
 				<button data-theme="green"  onClick={(): void => this.setState((state) => {
 					const allLayer = state.allLayer;
 					const idx = allLayer.findIndex((layer2) => state.currentLayer.id === layer2.id);
-					if (idx > -1 && idx < allLayer.length - 1) {
+					if (idx > -1 && idx + 1 < allLayer.length) {
 						const target = allLayer.splice(idx, 1)[0];
 						allLayer.splice(idx + 1, 0, target);
 					}

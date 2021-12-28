@@ -1,7 +1,7 @@
 :global(#painting_canvas) {
 	position: relative;
 	width: 100%;
-	max-width: 1366px;
+	// max-width: 1366px;
 	// height: 100%;
 	:global(#main_layer) {
 		position: absolute;
@@ -28,8 +28,11 @@
 	}
 }
 
-:global(#tool_menu) > *:not(.first-child) {
-	margin-left: 20px;
+:global(#tool_menu) {
+	padding: 20px;
+	> *:not(:first-child) {
+		margin-left: 20px;
+	}
 }
 
 :global(.colorful) {
@@ -45,17 +48,26 @@
 		border-radius: 4px;
 	}
 }
-:global(#layer_menu) ul {
-	padding: 0;
-	margin: 0;
-	list-style: none;
+:global(#layer_menu) {
+	padding: 20px;
+	> ul {		
+		padding: 0;
+		margin: 0;
+		list-style: none;
 
-	:global(.layer_item) {
-		height: 40px;
-		line-height: 40px;
-		cursor: pointer;
-		> span {
-			color: #f00;
+		:global(.layer_item) {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			height: 40px;
+			line-height: 40px;
+			cursor: pointer;
+			&:global(.selected) {
+				color: #0d6efd;
+			}		
+
+			> span {
+				color: #f00;
+			}
 		}
 	}
 }
